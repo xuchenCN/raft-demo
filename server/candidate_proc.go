@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"time"
 )
 
 /**
@@ -23,7 +22,7 @@ follower
 var doCandidate = true;
 
 func (s *server) startCandidateProc() {
-	s.timeout = time.Duration(Random(50,200)) * time.Millisecond
+
 }
 
 func (s *server) doVoteUntilTimeout() {

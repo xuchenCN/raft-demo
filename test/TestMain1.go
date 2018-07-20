@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	s1 := server.NewServer("127.0.0.1",7000)
+	s1 := server.NewServer("127.0.0.1",7001)
 
 	stopCh := make(chan int)
 	sigCh := make(chan os.Signal)
@@ -28,10 +28,8 @@ func main() {
 	}()
 
 	go func() {
-		s1.WithServers("127.0.0.1:7001","127.0.0.1:7002").Start()
+		s1.WithServers("127.0.0.1:7000","127.0.0.1:7002").Start()
 	}()
 
 	<-stopCh
 }
-
-

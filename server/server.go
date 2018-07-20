@@ -55,12 +55,13 @@ func NewServer(host string, port int) *server {
 	return &s
 }
 
-func (s *server) WithServers(peers... string) {
+func (s *server) WithServers(peers... string) *server {
 	for _, address := range peers {
 		p := peer{}
 		p.address = address
 		s.peers = append(s.peers,p)
 	}
+	return s
 }
 
 func (s *server) Start() {
@@ -68,6 +69,8 @@ func (s *server) Start() {
 	if(len(s.peers) < 2) {
 		log.Fatal("At least 2 peers needed")
 	}
+
+	stopCh := make(chan int)
 
 	//TODO load logs to State Machine
 
@@ -77,7 +80,7 @@ func (s *server) Start() {
 		log.Fatal(err)
 	}
 
-	log.Info("Start server using ID " + s.id)
+
 
 	s.grpcSrv = grpc.NewServer()
 
@@ -85,14 +88,21 @@ func (s *server) Start() {
 
 	// Register reflection service on gRPC server.
 	reflection.Register(s.grpcSrv)
-	if err := s.grpcSrv.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-	}
+
+	go func() {
+		if err := s.grpcSrv.Serve(lis); err != nil {
+			log.Warn("failed to serve: %v", err)
+		}
+		close(stopCh)
+	}()
+
+	log.Info("Start server using ID " + s.id)
 
 	s.startCommonProc()
-
 	//First start become follower
 	s.becomeFollower()
+
+	<- stopCh
 }
 
 
@@ -104,3 +114,21 @@ func (s *server) becomeFollower() {
 	log.Info(s.id + " become a " + s.role.String())
 }
 
+func (s *server) GetID() string {
+	return s.id
+}
+
+func (s *server) becomeCandidate() {
+	s.stopLeaderProc()
+	s.stopFollowerProc()
+	s.startCandidateProc()
+	s.role = pb.ServerRole_CANDIDATE
+	log.Info(s.id + " become a " + s.role.String())
+}
+
+func (s *server) Stop() {
+	s.stopLeaderProc()
+	s.stopCandidate()
+	s.stopFollowerProc()
+	s.grpcSrv.Stop()
+}
