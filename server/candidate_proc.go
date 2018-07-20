@@ -44,3 +44,7 @@ func (s *server) doVoteUntilTimeout() {
 		}
 	}
 }
+
+func (s *server) stopCandidate() {
+	doCandidate = false
+}

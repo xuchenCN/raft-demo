@@ -15,6 +15,12 @@ of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N (§5
 
  */
 
+var doLeaderProc = true
+
 func (s *server) startLeaderProc() {
 
+}
+
+func (s *server) stopLeaderProc() {
+	doLeaderProc = false;
 }

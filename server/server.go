@@ -20,10 +20,8 @@ type server struct {
 	//TODO log[]
 
 	//Volatile state on all servers
-	commitIndex int
-	lastApplied int
-
-	//TODO nextIndex matchIndex
+	commitIndex int32
+	lastApplied int32
 
 	//Heartbeat relevant
 	timeout time.Duration
@@ -32,16 +30,21 @@ type server struct {
 	//Context
 	ctx context.Context
 
-	peers []string
+	//Current state
+	role pb.ServerRole
+
+	peers []peer
 }
 
-func (s *server) AppendEntries(context.Context, *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
-	fmt.Println("implement me")
+
+
+func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
+	fmt.Println("Receive AppendEntries " + req.String())
 	return nil,nil
 }
 
-func (s *server) RequestVote(context.Context, *pb.RequestVoteParam) (*pb.RequestVoteResult, error) {
-	fmt.Println("implement me")
+func (s *server) RequestVote(ctx context.Context,  req *pb.RequestVoteParam) (*pb.RequestVoteResult, error) {
+	fmt.Println("Receive RequestVote " + req.String())
 	return nil,nil
 }
 
@@ -53,7 +56,11 @@ func NewServer(host string, port int) *server {
 }
 
 func (s *server) WithServers(peers... string) {
-	s.peers = peers
+	for _, address := range peers {
+		p := peer{}
+		p.address = address
+		s.peers = append(s.peers,p)
+	}
 }
 
 func (s *server) Start() {
@@ -61,6 +68,8 @@ func (s *server) Start() {
 	if(len(s.peers) < 2) {
 		log.Fatal("At least 2 peers needed")
 	}
+
+	//TODO load logs to State Machine
 
 	lis , err := net.Listen("tcp",s.id)
 
@@ -79,4 +88,19 @@ func (s *server) Start() {
 	if err := s.grpcSrv.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
+
+	s.startCommonProc()
+
+	//First start become follower
+	s.becomeFollower()
 }
+
+
+func (s *server) becomeFollower() {
+	s.stopLeaderProc()
+	s.stopCandidate()
+	s.startFollowerProc()
+	s.role = pb.ServerRole_FOLLOWER
+	log.Info(s.id + " become a " + s.role.String())
+}
+

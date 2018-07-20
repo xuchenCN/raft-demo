@@ -12,7 +12,8 @@ import "time"
 var doFollower = true
 
 func (s *server) startFollowerProc() {
-
+	doFollower = true
+	go s.pingChecker()
 }
 
 func (s *server) pingChecker() {

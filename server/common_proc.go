@@ -15,14 +15,16 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
-func startCommonProc(s *server) {
-	go doApplyLogRunner(s)
+func (s *server) startCommonProc() {
+	go s.doApplyLogRunner()
+	s.lastHeartbeat = time.Now()
 }
 
-func doApplyLogRunner(s *server) {
+func (s *server) doApplyLogRunner() {
 	for {
 		if s.commitIndex > s.lastApplied {
 			//TODO Apply to State Machine
+
 		}
 	}
 }
