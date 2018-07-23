@@ -15,9 +15,9 @@ type server struct {
 	id string
 	grpcSrv *grpc.Server
 	//Persistent state on all servers
-	currentTerm string
+	currentTerm int32
 	voteFor string
-	//TODO log[]
+	logs []pb.LogEntry
 
 	//Volatile state on all servers
 	commitIndex int32
@@ -80,7 +80,10 @@ func (s *server) Start() {
 		log.Fatal(err)
 	}
 
-
+	// Connect peers
+	for _ , peer := range s.peers {
+		peer.connect()
+	}
 
 	s.grpcSrv = grpc.NewServer()
 
@@ -97,6 +100,8 @@ func (s *server) Start() {
 	}()
 
 	log.Info("Start server using ID " + s.id)
+
+
 
 	s.startCommonProc()
 	//First start become follower
