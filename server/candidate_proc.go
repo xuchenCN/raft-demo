@@ -3,9 +3,10 @@ package server
 import (
 	"context"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	pb "github.com/xuchenCN/raft-demo/protocol"
-	"golang.org/x/net/html/atom"
+	log "github.com/sirupsen/logrus"
+	"sync/atomic"
+	"time"
 )
 
 /**
@@ -24,36 +25,51 @@ follower
 */
 
 var doCandidate = true;
-var voteResultCh = make(chan bool,1)
-
 
 func (s *server) startCandidateProc() {
-
+	doCandidate = true;
+	s.doVoteUntilTimeout()
 }
 
 func (s *server) doVoteUntilTimeout() {
-	for doCandidate {
+	i := 0
+	for range time.Tick(5 * time.Millisecond) {
 
-		lastLog := s.logs[len(s.logs) - 1]
+		if !doCandidate {
+			return
+		}
+		i ++
+		log.Infof("Start vote %d" , i)
+		//lastLog := s.logs[len(s.logs) - 1]
+		lastLog := pb.LogEntry{Term:1,Index:1}
 		req := pb.RequestVoteParam{
 			Term:s.currentTerm,
 			CandidateId:s.id,
 			LastLogIndex:lastLog.Index,
 			LastLogTerm:lastLog.Term}
 
-		s.launchVote(&req)
+		voteResultCh := make(chan bool,1)
+		voteResponseCh := make(chan *pb.RequestVoteResult,len(s.peers))
 
-		c , cancel := context.WithTimeout(s.ctx,s.timeout)
+		c , cancel := context.WithCancel(context.Background())
+
+		s.launchVote(c,&req,voteResponseCh,voteResultCh)
 
 		select {
-		case <- c.Done():
+		case <- time.After(s.timeout):
 			//TODO continue
-		case true == <- voteResultCh:
-			//TODO Become leader
+			log.Warn("timeout")
 			cancel()
-		case false == <- voteResultCh:
-			//TODO Rejected
+		case <- voteResultCh:
+			log.Infof("Vote completed")
 		}
+		close(voteResponseCh)
+
+		for resp := range voteResponseCh {
+			fmt.Println(resp)
+		}
+
+		log.Infof("======= BLOCK %d =========" , i)
 	}
 }
 
@@ -61,36 +77,36 @@ func (s *server) stopCandidate() {
 	doCandidate = false
 }
 
-func (s *server) launchVote(req *pb.RequestVoteParam) {
+func (s *server) launchVote(ctx context.Context , req *pb.RequestVoteParam , voteResponseCh chan<-*pb.RequestVoteResult, voteResultCh chan<-bool) {
 
-	answered := 0
-	cancelMap := make(map[string]context.CancelFunc)
-	voteResponseCh := make(chan *pb.RequestVoteResult,len(s.peers))
-	defer close(voteResponseCh)
+	var answered int32 = 1
 
-	doVoteFunc := func(p peer) {
-		c,cancel := context.WithTimeout(s.ctx,s.timeout)
-		cancelMap[p.address] = cancel
+	doVoteFunc := func(p *peer) {
 
-		result ,err := p.getRpcClient().RequestVote(c, req)
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Println(err)
+			}
+		}()
+
+		result ,err := p.getRpcClient().RequestVote(ctx, req)
 		if err != nil {
 			result = &pb.RequestVoteResult{Term:-1,VoteGranted:false}
 		}
 
 		voteResponseCh <- result
-		answered += 1
-		delete(cancelMap,p.address)
+		atomic.AddInt32(&answered,1)
 	}
 
 	for _,peer := range s.peers {
 		go doVoteFunc(peer)
 	}
 
-	for answered < (len(s.peers) / 2 + 1) {
+	majority := (int32)(len(s.peers) / 2)
+	for atomic.LoadInt32(&answered) > majority {
 
 	}
 
-	for resp := range voteResponseCh {
-		fmt.Println(resp)
-	}
+	close(voteResultCh)
+
 }

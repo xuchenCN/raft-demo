@@ -27,13 +27,10 @@ type server struct {
 	timeout time.Duration
 	lastHeartbeat time.Time
 
-	//Context
-	ctx context.Context
-
 	//Current state
 	role pb.ServerRole
 
-	peers []peer
+	peers []*peer
 }
 
 
@@ -59,7 +56,7 @@ func (s *server) WithServers(peers... string) *server {
 	for _, address := range peers {
 		p := peer{}
 		p.address = address
-		s.peers = append(s.peers,p)
+		s.peers = append(s.peers,&p)
 	}
 	return s
 }
