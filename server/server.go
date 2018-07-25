@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
-	pb "github.com/xuchenCN/raft-demo/protocol"
 	log "github.com/sirupsen/logrus"
+	pb "github.com/xuchenCN/raft-demo/protocol"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"net"
@@ -45,7 +45,25 @@ func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) 
 
 func (s *server) RequestVote(ctx context.Context,  req *pb.RequestVoteParam) (*pb.RequestVoteResult, error) {
 	fmt.Println("Receive RequestVote " + req.String())
-	return nil,nil
+
+	resp := pb.RequestVoteResult{}
+
+	lastLog := pb.LogEntry{Term:s.getCurrentTerm(),Index:0}
+	if len(s.logs) > 0 {
+		lastLog = s.logs[len(s.logs)-1]
+	}
+
+	if lastLog.Term <= req.Term && lastLog.Index <= req.LastLogIndex {
+		resp.Term = s.getCurrentTerm()
+		resp.VoteGranted = true;
+	} else {
+		resp.Term = s.getCurrentTerm()
+		resp.VoteGranted = false;
+	}
+
+	log.Infof("Vote response to %d %v",req.CandidateId,resp.VoteGranted)
+
+	return &resp,nil
 }
 
 
@@ -114,8 +132,8 @@ func (s *server) incrementTerm(i int32) {
 	atomic.AddInt32(&s.currentTerm,i)
 }
 
-func (s *server) setCurrentTermTo (i int32) {
-	atomic.CompareAndSwapInt32(&s.currentTerm,atomic.LoadInt32(&s.currentTerm),i)
+func (s *server) setCurrentTerm (i int32) {
+	atomic.StoreInt32(&s.currentTerm,i)
 }
 
 func (s * server) getCurrentTerm() int32 {

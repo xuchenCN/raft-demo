@@ -33,7 +33,7 @@ func (s *server) startCandidateProc() {
 
 func (s *server) doVoteUntilTimeout() {
 	i := 0
-	for range time.Tick(5 * time.Millisecond) {
+	for range time.Tick(s.timeout) {
 
 		if !doCandidate {
 			return
@@ -42,9 +42,9 @@ func (s *server) doVoteUntilTimeout() {
 		log.Infof("Start vote %d" , i)
 		lastLog := pb.LogEntry{Term:s.getCurrentTerm(),Index:0}
 		if len(s.logs) > 0 {
-			lastLog = s.logs[len(s.logs) - 1]
-		//lastLog := s.logs[len(s.logs) - 1]
-
+			lastLog = s.logs[len(s.logs)-1]
+		}
+		majority := (int32)(len(s.peers) / 2)
 		req := pb.RequestVoteParam{
 			Term:s.currentTerm,
 			CandidateId:s.id,
@@ -56,7 +56,7 @@ func (s *server) doVoteUntilTimeout() {
 
 		c , cancel := context.WithCancel(context.Background())
 
-		s.launchVote(c,&req,voteResponseCh,voteResultCh)
+		s.launchVote(c,majority,&req,voteResponseCh,voteResultCh)
 
 		select {
 		case <- time.After(s.timeout):
@@ -68,9 +68,9 @@ func (s *server) doVoteUntilTimeout() {
 		}
 		close(voteResponseCh)
 
-		for resp := range voteResponseCh {
-			fmt.Println(resp)
-		}
+
+		accepted , timeout , lastTerm := checkVoteResult(voteResponseCh)
+		log.Infof("accepted %d timeout %d lastTerm %d",accepted,timeout,lastTerm)
 
 		log.Infof("======= BLOCK %d =========" , i)
 	}
@@ -80,9 +80,22 @@ func (s *server) stopCandidate() {
 	doCandidate = false
 }
 
-func (s *server) launchVote(ctx context.Context , req *pb.RequestVoteParam , voteResponseCh chan<-*pb.RequestVoteResult, voteResultCh chan<-bool) {
+func checkVoteResult(voteResponseCh chan *pb.RequestVoteResult) (accepted,timeout,lastTerm int32 ) {
+	for resp := range voteResponseCh {
+		if resp.VoteGranted {
+			accepted += 1
+		} else if resp.Term < 0 {
+			timeout += 1
+		} else if lastTerm < resp.Term{
+			lastTerm = resp.Term
+		}
+	}
+	return accepted,timeout,lastTerm
+}
 
-	var answered int32 = 1
+func (s *server) launchVote(ctx context.Context ,majority int32, req *pb.RequestVoteParam , voteResponseCh chan<-*pb.RequestVoteResult, voteResultCh chan<-bool) {
+
+	var answered int32 = 0
 
 	doVoteFunc := func(p *peer) {
 
@@ -105,11 +118,10 @@ func (s *server) launchVote(ctx context.Context , req *pb.RequestVoteParam , vot
 		go doVoteFunc(peer)
 	}
 
-	majority := (int32)(len(s.peers) / 2)
-	for atomic.LoadInt32(&answered) > majority {
+	for atomic.LoadInt32(&answered) < majority {
 
 	}
-
+	log.Infof("Vote to %d member wait for %d response",len(s.peers),majority)
 	close(voteResultCh)
 
 }
