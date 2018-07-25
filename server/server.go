@@ -8,6 +8,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 	"net"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,8 +33,9 @@ type server struct {
 	role pb.ServerRole
 
 	peers []*peer
-}
 
+	sync.RWMutex
+}
 
 
 func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
@@ -105,6 +108,18 @@ func (s *server) Start() {
 	s.becomeFollower()
 
 	<- stopCh
+}
+
+func (s *server) incrementTerm(i int32) {
+	atomic.AddInt32(&s.currentTerm,i)
+}
+
+func (s *server) setCurrentTermTo (i int32) {
+	atomic.CompareAndSwapInt32(&s.currentTerm,atomic.LoadInt32(&s.currentTerm),i)
+}
+
+func (s * server) getCurrentTerm() int32 {
+	return atomic.LoadInt32(&s.currentTerm)
 }
 
 

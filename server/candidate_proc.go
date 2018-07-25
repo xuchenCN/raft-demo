@@ -40,8 +40,11 @@ func (s *server) doVoteUntilTimeout() {
 		}
 		i ++
 		log.Infof("Start vote %d" , i)
+		lastLog := pb.LogEntry{Term:s.getCurrentTerm(),Index:0}
+		if len(s.logs) > 0 {
+			lastLog = s.logs[len(s.logs) - 1]
 		//lastLog := s.logs[len(s.logs) - 1]
-		lastLog := pb.LogEntry{Term:1,Index:1}
+
 		req := pb.RequestVoteParam{
 			Term:s.currentTerm,
 			CandidateId:s.id,
