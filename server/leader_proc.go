@@ -1,5 +1,13 @@
 package server
 
+import (
+	"context"
+	log "github.com/sirupsen/logrus"
+	pb "github.com/xuchenCN/raft-demo/protocol"
+	"time"
+)
+
+
 /**
 
 Leaders:
@@ -16,11 +24,59 @@ of matchIndex[i] ≥ N, and log[N].term == currentTerm: set commitIndex = N (§5
  */
 
 var doLeaderProc = true
+var heartbeatContext context.Context
+var cancelHeartbeatFunc context.CancelFunc
+
+type peerHeartbeatResult struct {
+	peer *peer
+	result *pb.AppendEntriesResult
+}
 
 func (s *server) startLeaderProc() {
-
+	doLeaderProc = true
+	heartbeatContext,cancelHeartbeatFunc = context.WithCancel(context.Background())
+	s.startHeartbeatToMembers()
 }
 
 func (s *server) stopLeaderProc() {
 	doLeaderProc = false;
+	if cancelHeartbeatFunc != nil {
+		cancelHeartbeatFunc()
+	}
+}
+
+func (s *server) startHeartbeatToMembers() {
+
+	for _,p := range s.peers {
+		log.Infof("Start heartbart to %s",p.address)
+		go s.doHeartbeat(heartbeatContext,p)
+	}
+}
+
+func (s *server) doHeartbeat(ctx context.Context, peer *peer) {
+
+	for doLeaderProc {
+
+		select {
+		case <- time.After(500 * time.Millisecond): {
+
+			prevLog := s.GetPrevLog()
+
+			request := pb.AppendEntriesParam{
+				Term:s.getCurrentTerm(),
+				LeaderId:s.id,
+				PrevLogIndex:prevLog.Index,
+				PrevLogTerm:prevLog.Term,
+				Entries:nil,
+				LeaderCommit:s.commitIndex,
+			}
+
+			peer.client.AppendEntries(ctx,&request)
+			log.Infof("Sent heartbeat to %s" , peer.address)
+		}
+		case <- ctx.Done():
+			break;
+		}
+	}
+
 }

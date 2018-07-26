@@ -39,8 +39,23 @@ type server struct {
 
 
 func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
-	fmt.Println("Receive AppendEntries " + req.String())
-	return nil,nil
+	fmt.Println("Reveive AppendEntries " + req.String())
+
+	if s.role == pb.ServerRole_CANDIDATE {
+		s.becomeFollower()
+	}
+
+	if s.getCurrentTerm() < req.Term {
+		s.setCurrentTerm(req.Term)
+	}
+
+	s.lastHeartbeat = time.Now()
+
+	//TODO append logs
+
+	resp := pb.AppendEntriesResult{Term:s.getCurrentTerm(),Success:true}
+
+	return &resp,nil
 }
 
 func (s *server) RequestVote(ctx context.Context,  req *pb.RequestVoteParam) (*pb.RequestVoteResult, error) {
@@ -53,15 +68,34 @@ func (s *server) RequestVote(ctx context.Context,  req *pb.RequestVoteParam) (*p
 		lastLog = s.logs[len(s.logs)-1]
 	}
 
+	if s.role == pb.ServerRole_LEADER {
+		resp.Term = s.getCurrentTerm()
+		resp.VoteGranted = false;
+		return &resp, nil
+	}
+
+	if s.voteFor != s.id && s.voteFor != req.CandidateId {
+		resp.Term = s.getCurrentTerm()
+		resp.VoteGranted = false;
+		return &resp, nil
+	}
+
 	if lastLog.Term <= req.Term && lastLog.Index <= req.LastLogIndex {
 		resp.Term = s.getCurrentTerm()
 		resp.VoteGranted = true;
+		//Stop vote request
+		//FIXME If concurrent from other candidate?
+		if s.role == pb.ServerRole_CANDIDATE {
+			s.stopCandidate()
+			s.voteFor = req.CandidateId
+		}
+
 	} else {
 		resp.Term = s.getCurrentTerm()
 		resp.VoteGranted = false;
 	}
 
-	log.Infof("Vote response to %d %v",req.CandidateId,resp.VoteGranted)
+	log.Infof("Vote response to %s %v",req.CandidateId,resp.VoteGranted)
 
 	return &resp,nil
 }
@@ -120,7 +154,6 @@ func (s *server) Start() {
 	log.Info("Start server using ID " + s.id)
 
 
-
 	s.startCommonProc()
 	//First start become follower
 	s.becomeFollower()
@@ -149,16 +182,23 @@ func (s *server) becomeFollower() {
 	log.Info(s.id + " become a " + s.role.String())
 }
 
-func (s *server) GetID() string {
-	return s.id
-}
 
 func (s *server) becomeCandidate() {
 	s.stopLeaderProc()
 	s.stopFollowerProc()
-	s.startCandidateProc()
 	s.role = pb.ServerRole_CANDIDATE
+	s.voteFor = s.id
 	log.Info(s.id + " become a " + s.role.String())
+	s.startCandidateProc()
+}
+
+func (s *server) becomeLeader() {
+	s.stopLeaderProc()
+	s.stopFollowerProc()
+	s.stopCandidate()
+	s.role = pb.ServerRole_LEADER
+	log.Info(s.id + " become a " + s.role.String())
+	s.startLeaderProc()
 }
 
 func (s *server) Stop() {
@@ -166,4 +206,24 @@ func (s *server) Stop() {
 	s.stopCandidate()
 	s.stopFollowerProc()
 	s.grpcSrv.Stop()
+}
+
+func (s *server) GetID() string {
+	return s.id
+}
+
+func (s *server) GetLastLog() pb.LogEntry {
+	prevLog := pb.LogEntry{Term: 0, Index: 0}
+	if len(s.logs) > 1 {
+		prevLog = s.logs[len(s.logs)-2]
+	}
+	return prevLog
+}
+
+func (s *server) GetPrevLog() pb.LogEntry {
+	lastLog := pb.LogEntry{Term: 0, Index: 0}
+	if len(s.logs) > 0 {
+		lastLog = s.logs[len(s.logs)-1]
+	}
+	return lastLog
 }

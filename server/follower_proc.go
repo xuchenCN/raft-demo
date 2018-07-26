@@ -13,7 +13,7 @@ import log "github.com/sirupsen/logrus"
 var doFollower = true
 
 func (s *server) startFollowerProc() {
-	s.timeout = time.Duration(Random(50,200)) * time.Millisecond
+	s.timeout = time.Duration(Random(3000,5000)) * time.Millisecond
 	log.Info(s.id + " start with timeout " + s.timeout.String())
 	doFollower = true
 	go s.pingChecker()
