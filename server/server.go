@@ -236,8 +236,8 @@ func (s *server) GetPrevLog(index int32) pb.LogEntry {
 	defer s.RUnlock()
 
 	prevLog := pb.LogEntry{Term: 0, Index: 0}
-	if len(s.logs) > int(index) {
-		prevLog = *s.logs[index-1]
+	if index >= 0 && len(s.logs) > int(index) {
+		prevLog = *s.logs[index]
 	}
 	return prevLog
 }

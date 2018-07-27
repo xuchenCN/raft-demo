@@ -93,3 +93,37 @@ func (s *server) buildAppendEntriesParam(peer *peer) (*pb.AppendEntriesParam,int
 
 	return &request,lastLog.Index
 }
+
+
+func (s *server) logRampUpRunner() {
+
+
+	for range time.Tick(1 * time.Millisecond) {
+
+		minReplicated,minReplicatedMember := s.GetLastLog().Index,0
+		majority := len(s.peers) / 2
+
+
+		for _,peer := range s.peers {
+
+			if peer.matchIndex <= minReplicated &&
+				s.logs[peer.matchIndex].Term == s.currentTerm &&
+				peer.matchIndex > s.commitIndex {
+
+				if minReplicated == peer.matchIndex {
+					minReplicatedMember += 1
+				} else {
+					minReplicated = peer.matchIndex
+					minReplicatedMember = 1
+				}
+			}
+
+		}
+
+		//Majority members replicated this index
+		if majority >= minReplicatedMember {
+			s.commitIndex = int32(minReplicatedMember)
+		}
+	}
+}
+

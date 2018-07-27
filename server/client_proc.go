@@ -11,5 +11,6 @@ func (s *server) receiveClientRequest(date []byte) {
 
 	s.Lock()
 	s.logs = append(s.logs,&logEntry)
+	s.commitIndex += 1
 	s.Unlock()
 }

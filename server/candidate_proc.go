@@ -46,10 +46,7 @@ func (s *server) doVoteUntilTimeout() {
 			{
 				i++
 				log.Infof("Start vote %d", i)
-				lastLog := pb.LogEntry{Term: 0, Index: 0}
-				if len(s.logs) > 0 {
-					lastLog = s.logs[len(s.logs)-1]
-				}
+				lastLog := s.GetLastLog()
 				majority := (int32)(len(s.peers) / 2)
 				req := pb.RequestVoteParam{
 					Term:         s.currentTerm,
