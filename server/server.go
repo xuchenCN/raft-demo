@@ -218,6 +218,10 @@ func (s *server) GetID() string {
 
 func (s *server) GetLastLog() pb.LogEntry {
 	lastLog := pb.LogEntry{Term: 0, Index: 0}
+
+	s.RLock()
+	defer s.RUnlock()
+
 	if len(s.logs) > 1 {
 		lastLog = *s.logs[len(s.logs)-1]
 	}
@@ -227,6 +231,9 @@ func (s *server) GetLastLog() pb.LogEntry {
 func (s *server) GetPrevLog(index int32) pb.LogEntry {
 	//Fix index
 	index = index - 1
+
+	s.RLock()
+	defer s.RUnlock()
 
 	prevLog := pb.LogEntry{Term: 0, Index: 0}
 	if len(s.logs) > int(index) {
