@@ -19,7 +19,7 @@ type server struct {
 	//Persistent state on all servers
 	currentTerm int32
 	voteFor string
-	logs []pb.LogEntry
+	logs []*pb.LogEntry
 
 	//Volatile state on all servers
 	commitIndex int32
@@ -41,6 +41,9 @@ type server struct {
 func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
 	fmt.Println("Reveive AppendEntries " + req.String())
 
+
+	resp := pb.AppendEntriesResult{Term:s.getCurrentTerm(),Success:true}
+
 	if s.role == pb.ServerRole_CANDIDATE {
 		s.becomeFollower()
 	}
@@ -49,11 +52,15 @@ func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) 
 		s.setCurrentTerm(req.Term)
 	}
 
+	if (s.currentTerm > req.Term) {
+		resp.Success = false
+	}
+
+	if req.Entries != nil && len(req.Entries) > 0 {
+		//TODO receive entries
+	}
+
 	s.lastHeartbeat = time.Now()
-
-	//TODO append logs
-
-	resp := pb.AppendEntriesResult{Term:s.getCurrentTerm(),Success:true}
 
 	return &resp,nil
 }
@@ -63,10 +70,7 @@ func (s *server) RequestVote(ctx context.Context,  req *pb.RequestVoteParam) (*p
 
 	resp := pb.RequestVoteResult{}
 
-	lastLog := pb.LogEntry{Term:s.getCurrentTerm(),Index:0}
-	if len(s.logs) > 0 {
-		lastLog = s.logs[len(s.logs)-1]
-	}
+	lastLog := s.GetLastLog()
 
 	if s.role == pb.ServerRole_LEADER {
 		resp.Term = s.getCurrentTerm()
@@ -213,17 +217,20 @@ func (s *server) GetID() string {
 }
 
 func (s *server) GetLastLog() pb.LogEntry {
-	prevLog := pb.LogEntry{Term: 0, Index: 0}
-	if len(s.logs) > 1 {
-		prevLog = s.logs[len(s.logs)-2]
-	}
-	return prevLog
-}
-
-func (s *server) GetPrevLog() pb.LogEntry {
 	lastLog := pb.LogEntry{Term: 0, Index: 0}
-	if len(s.logs) > 0 {
-		lastLog = s.logs[len(s.logs)-1]
+	if len(s.logs) > 1 {
+		lastLog = *s.logs[len(s.logs)-1]
 	}
 	return lastLog
+}
+
+func (s *server) GetPrevLog(index int32) pb.LogEntry {
+	//Fix index
+	index = index - 1
+
+	prevLog := pb.LogEntry{Term: 0, Index: 0}
+	if len(s.logs) > int(index) {
+		prevLog = *s.logs[index-1]
+	}
+	return prevLog
 }

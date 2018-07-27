@@ -23,8 +23,8 @@ func (s *server) startCommonProc() {
 func (s *server) doApplyLogRunner() {
 	for range time.Tick(1 * time.Millisecond) {
 		if s.commitIndex > s.lastApplied {
-			//TODO Apply to State Machine
-
+			s.applyLog(&s.logs[s.lastApplied:s.commitIndex])
+			s.lastApplied = s.commitIndex
 		}
 	}
 }

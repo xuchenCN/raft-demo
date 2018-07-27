@@ -60,23 +60,36 @@ func (s *server) doHeartbeat(ctx context.Context, peer *peer) {
 		select {
 		case <- time.After(500 * time.Millisecond): {
 
-			prevLog := s.GetPrevLog()
+			request, lastIndex := s.buildAppendEntriesParam(peer)
 
-			request := pb.AppendEntriesParam{
-				Term:s.getCurrentTerm(),
-				LeaderId:s.id,
-				PrevLogIndex:prevLog.Index,
-				PrevLogTerm:prevLog.Term,
-				Entries:nil,
-				LeaderCommit:s.commitIndex,
-			}
-
-			peer.client.AppendEntries(ctx,&request)
+			peer.client.AppendEntries(ctx,request)
 			log.Infof("Sent heartbeat to %s" , peer.address)
+			peer.nextIndex, peer.matchIndex = lastIndex,lastIndex
 		}
 		case <- ctx.Done():
 			break;
 		}
 	}
 
+}
+
+func (s *server) buildAppendEntriesParam(peer *peer) (*pb.AppendEntriesParam,int32 ){
+	prevLog := s.GetPrevLog(peer.nextIndex)
+	lastLog := s.GetLastLog()
+	entries := make([]*pb.LogEntry,0)
+
+	if lastLog.Index >= peer.nextIndex {
+		entries = s.logs[peer.nextIndex:]
+	}
+
+	request := pb.AppendEntriesParam{
+		Term:s.getCurrentTerm(),
+		LeaderId:s.id,
+		PrevLogIndex:prevLog.Index,
+		PrevLogTerm:prevLog.Term,
+		Entries:entries,
+		LeaderCommit:s.commitIndex,
+	}
+
+	return &request,lastLog.Index
 }

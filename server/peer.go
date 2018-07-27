@@ -51,6 +51,7 @@ func (p *peer) connect() {
 	p.client = pb.NewServerServiceClient(conn)
 	log.Info("Client " + p.address + " connected")
 	p.ctx = context.Background()
+	p.nextIndex = 1
 }
 
 func (p *peer) getRpcClient() pb.ServerServiceClient {
