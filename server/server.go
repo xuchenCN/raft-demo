@@ -7,6 +7,7 @@ import (
 	pb "github.com/xuchenCN/raft-demo/protocol"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -38,6 +39,19 @@ type server struct {
 }
 
 
+/**
+Receiver implementation:
+1. Reply false if term < currentTerm (§5.1)
+2. Reply false if log doesn’t contain an entry at prevLogIndex
+whose term matches prevLogTerm (§5.3)
+3. If an existing entry conflicts with a new one (same index
+but different terms), delete the existing entry and all that
+follow it (§5.3)
+4. Append any new entries not already in the log
+5. If leaderCommit > commitIndex, set commitIndex =
+min(leaderCommit, index of last new entry)
+ */
+
 func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) (*pb.AppendEntriesResult, error) {
 	fmt.Println("Reveive AppendEntries " + req.String())
 
@@ -58,6 +72,18 @@ func (s *server) AppendEntries(ctx context.Context, req *pb.AppendEntriesParam) 
 
 	if req.Entries != nil && len(req.Entries) > 0 {
 		//TODO receive entries
+		hasIndexLog := s.GetLogEntryByIndex(req.Entries[0].Index)
+		if hasIndexLog.Term != req.Entries[0].Term {
+			s.DeleteLogAndFollows(req.Entries[0].Index)
+		}
+		s.logs = append(s.logs,req.Entries...)
+
+		if req.LeaderCommit > s.commitIndex {
+			//TODO Fix min func 
+			//https://mrekucci.blogspot.com/2015/07/dont-abuse-mathmax-mathmin.html
+			s.commitIndex = int32(math.Min(float64(s.GetLastLog().Index),float64(req.LeaderCommit)))
+		}
+
 	}
 
 	s.lastHeartbeat = time.Now()
@@ -240,4 +266,25 @@ func (s *server) GetPrevLog(index int32) pb.LogEntry {
 		prevLog = *s.logs[index]
 	}
 	return prevLog
+}
+
+func (s *server) GetLogEntryByIndex(index int32) *pb.LogEntry {
+	h := len(s.logs)
+	for i := h ; i >= 0 ; i -- {
+		logEntry := s.logs[i]
+		if logEntry.Index == index {
+			return logEntry
+		}
+	}
+	return nil
+}
+
+func (s *server) DeleteLogAndFollows(index int32) {
+	h := len(s.logs)
+	for i := h ; i >= 0 ; i -- {
+		logEntry := s.logs[i]
+		if logEntry.Index == index {
+			s.logs = s.logs[:i]
+		}
+	}
 }

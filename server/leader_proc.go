@@ -36,6 +36,7 @@ func (s *server) startLeaderProc() {
 	doLeaderProc = true
 	heartbeatContext,cancelHeartbeatFunc = context.WithCancel(context.Background())
 	s.startHeartbeatToMembers()
+	go s.logRampUpRunner()
 }
 
 func (s *server) stopLeaderProc() {
@@ -97,12 +98,10 @@ func (s *server) buildAppendEntriesParam(peer *peer) (*pb.AppendEntriesParam,int
 
 func (s *server) logRampUpRunner() {
 
-
 	for range time.Tick(1 * time.Millisecond) {
 
 		minReplicated,minReplicatedMember := s.GetLastLog().Index,0
 		majority := len(s.peers) / 2
-
 
 		for _,peer := range s.peers {
 
